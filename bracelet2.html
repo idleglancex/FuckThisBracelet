@@ -293,6 +293,22 @@
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
         import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+        // --- GLOBAL STATE ---
+        const allCharmMeshes = [];
+        let selectedCharm = null;
+
+        // --- SAHNE ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(SKY_COLOR);
+        scene.fog = new THREE.Fog(SKY_COLOR, 15, 60);
+
+        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 8, 14);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.2;
         renderer.shadowMap.enabled = true;
