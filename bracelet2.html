@@ -338,6 +338,18 @@
         selectionBox.visible = false;
         scene.add(selectionBox);
 
+        // --- DEBUG HELPERS ---
+        const axesHelper = new THREE.AxesHelper(10);
+        scene.add(axesHelper);
+
+        const debugCube = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1, 1),
+            new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true })
+        );
+        debugCube.position.set(0, 0, 0);
+        scene.add(debugCube);
+        console.log("Debug Cube added at 0,0,0");
+
         // --- IŞIKLAR ---
         const lights = { bright: [], metal: [] };
 
@@ -550,6 +562,7 @@
 
                     if (Math.max(size.x, size.y, size.z) > 0) {
                         const scale = CHARM_SCALE / Math.max(size.x, size.y, size.z);
+                        console.log(`Applying Scale: ${scale} to ${url}`);
                         model.scale.set(scale, scale, scale);
 
                         // Recalculate center after scaling? No, logic was:
