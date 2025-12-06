@@ -501,64 +501,40 @@
 
                 const pivot = selectedCharm.parent;
                 pivot.remove(selectedCharm);
-                charmsGroup.remove(pivot);
+                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-                const idx = allCharmMeshes.indexOf(selectedCharm);
-                if (idx > -1) allCharmMeshes.splice(idx, 1);
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(charmsGroup.children, true);
 
-                deselectCharm();
-            } catch (e) {
-                console.error(e);
-                alert("Charm removed from scene, but storage delete might have failed.");
-
-                const pivot = selectedCharm.parent;
-                if (pivot) {
-                    pivot.remove(selectedCharm);
-                    charmsGroup.remove(pivot);
+                if (intersects.length > 0) {
+                    window.selectCharm(intersects[0].object);
                 }
-                const idx = allCharmMeshes.indexOf(selectedCharm);
-                if (idx > -1) allCharmMeshes.splice(idx, 1);
-                deselectCharm();
-            }
-        };
-
-        window.addEventListener('mousedown', (event) => {
-            if (event.target.closest('#controls') || event.target.closest('#charm-controls')) return;
-
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects(charmsGroup.children, true);
-
-            if (intersects.length > 0) {
-                window.selectCharm(intersects[0].object);
-            }
-        });
-
-        function loadModelSmart(url) {
-            return new Promise((resolve) => {
-                const ext = url.split('.').pop().toLowerCase();
-                const loader = (ext === 'fbx') ? loaders.fbx : (ext === 'obj' ? loaders.obj : loaders.gltf);
-                loader.load(url, (data) => {
-                    let model = data.scene || data;
-                    const box = new THREE.Box3().setFromObject(model);
-                    const size = box.getSize(new THREE.Vector3());
-                    if (Math.max(size.x, size.y, size.z) > 0) {
-                        const scale = CHARM_SCALE / Math.max(size.x, size.y, size.z);
-                        model.scale.set(scale, scale, scale);
-                        model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()).multiplyScalar(scale));
-                        model.position.y -= new THREE.Box3().setFromObject(model).max.y;
-                    }
-                    model.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; if (!c.material) c.material = new THREE.MeshStandardMaterial({ color: 0xffffff }); } });
-                    resolve(model);
-                }, undefined, () => resolve(null));
             });
-        }
 
-        function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
-        animate();
-        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+            function loadModelSmart(url) {
+                return new Promise((resolve) => {
+                    const ext = url.split('.').pop().toLowerCase();
+                    const loader = (ext === 'fbx') ? loaders.fbx : (ext === 'obj' ? loaders.obj : loaders.gltf);
+                    loader.load(url, (data) => {
+                        let model = data.scene || data;
+                        const box = new THREE.Box3().setFromObject(model);
+                        const size = box.getSize(new THREE.Vector3());
+                        if (Math.max(size.x, size.y, size.z) > 0) {
+                            const scale = CHARM_SCALE / Math.max(size.x, size.y, size.z);
+                            model.scale.set(scale, scale, scale);
+                            model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()).multiplyScalar(scale));
+                            model.position.y -= new THREE.Box3().setFromObject(model).max.y;
+                        }
+                        model.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; if (!c.material) c.material = new THREE.MeshStandardMaterial({ color: 0xffffff }); } });
+                        resolve(model);
+                    }, undefined, () => resolve(null));
+                });
+            }
+
+            function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
+            animate();
+            window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
     </script>
 </body>
 
