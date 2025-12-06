@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pandora 3D: Master Control</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #87CEEB;
+            font-family: 'Segoe UI', sans-serif;
+            color: white;
+            user-select: none;
+        }
+
+        /* YÜKLEME EKRANI */
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px 50px;
+            border-radius: 16px;
+            text-align: center;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.1);
+            transition: opacity 0.5s;
+            z-index: 10;
+        }
+
+        #msg {
+            font-size: 15px;
+            letter-spacing: 0.5px;
+            color: #444;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .spinner {
+            width: 30px;
+            height: 30px;
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: #007AFF;
+            animation: spin 0.8s ease-in-out infinite;
+            margin: 0 auto 15px auto;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* KONTROL PANELİ */
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 240px;
+            background: rgba(255, 255, 255, 0.90);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(8px);
+            color: #333;
+            font-size: 13px;
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .section-title {
+            font-weight: 800;
+            font-size: 11px;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 3px;
+        }
+
+        /* Stil Seçici */
+        .style-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 5px;
+        }
+
+        .radio-label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .radio-label input {
+            accent-color: #007AFF;
+            cursor: pointer;
+        }
+
+        /* Sliderlar */
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .slider-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .slider-row label {
+            font-weight: bold;
+            width: 25px;
+            color: #444;
+        }
+
+        .slider-row input {
+            flex: 1;
+            cursor: pointer;
+            accent-color: #333;
+            height: 4px;
+            margin: 0 10px;
+        }
+
+        .slider-val {
+            width: 35px;
+            text-align: right;
+            font-family: monospace;
+            font-size: 11px;
+            color: #666;
+        }
+
+        #footer {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            font-size: 12px;
+            color: rgba(0, 0, 0, 0.4);
+            pointer-events: none;
+            font-weight: bold;
+        }
+    </style>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+
+<body>
+
+    <!-- KONTROL PANELİ -->
+    <div id="controls">
+
+        <!-- 1. Görünüm Modu -->
+        <div>
+            <div class="section-title">Görünüm Modu</div>
+            <div class="style-group">
+                <label class="radio-label">
+                    <input type="radio" name="style" value="bright" checked onchange="switchStyle('bright')">
+                    Bright
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="style" value="metal" onchange="switchStyle('metal')">
+                    Metal
+                </label>
+            </div>
+        </div>
+
+        <!-- 2. Rotasyon Ayarı -->
+        <div>
+            <div class="section-title">Döndür (Rotation)</div>
+            <div class="slider-group">
+                <div class="slider-row">
+                    <label>X</label>
+                    <input type="range" min="-180" max="180" value="-90" oninput="updateCharmRotation('x', this.value)">
+                    <span id="rot-val-x" class="slider-val">-90°</span>
+                </div>
+                <div class="slider-row">
+                    <label>Y</label>
+                    <input type="range" min="-180" max="180" value="90" oninput="updateCharmRotation('y', this.value)">
+                    <span id="rot-val-y" class="slider-val">90°</span>
+                </div>
+                <div class="slider-row">
+                    <label>Z</label>
+                    <input type="range" min="-180" max="180" value="0" oninput="updateCharmRotation('z', this.value)">
+                    <span id="rot-val-z" class="slider-val">0°</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Konum Ayarı -->
+        <div>
+            <div class="section-title">Kaydır (Position)</div>
+            <div class="slider-group">
+                <div class="slider-row">
+                    <label>X</label>
+                    <input type="range" min="-2" max="2" step="0.05" value="0"
+                        oninput="updateCharmPosition('x', this.value)">
+                    <span id="pos-val-x" class="slider-val">0</span>
+                </div>
+                <div class="slider-row">
+                    <label>Y</label>
+                    <input type="range" min="-2" max="2" step="0.05" value="-0.3"
+                        oninput="updateCharmPosition('y', this.value)">
+                    <span id="pos-val-y" class="slider-val">-0.3</span>
+                </div>
+                <div class="slider-row">
+                    <label>Z</label>
+                    <input type="range" min="-2" max="2" step="0.05" value="0"
+                        oninput="updateCharmPosition('z', this.value)">
+                    <span id="pos-val-z" class="slider-val">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Seçili Charm Kontrolü -->
+        <div id="charm-controls"
+            style="border-top: 1px solid #ddd; padding-top: 10px; margin-top: 5px; opacity: 0.5; pointer-events: none;">
+            <div class="section-title" style="color:#E91E63">Seçili Charm Ayarları</div>
+
+            <div style="font-size:10px; color:#888; margin-bottom:5px; font-style:italic;" id="selected-charm-name">
+                (Bir charm seçin)
+            </div>
+
+            <!-- Charm Rotasyon -->
+            <div class="section-title">Charm Döndür</div>
+            <div class="slider-group">
+                <div class="slider-row">
+                    <label>Y</label>
+                    <input type="range" min="-180" max="180" value="0"
+                        oninput="updateSelectedCharmRotation('y', this.value)">
+                    <span id="c-rot-val-y" class="slider-val">0°</span>
+                </div>
+                <div class="slider-row">
+                    <label>Z</label>
+                    <input type="range" min="-180" max="180" value="0"
+                        oninput="updateSelectedCharmRotation('z', this.value)">
+                    <span id="c-rot-val-z" class="slider-val">0°</span>
+                </div>
+            </div>
+
+            <!-- Charm Konum -->
+            <div class="section-title" style="margin-top:5px;">Charm Kaydır</div>
+            <div class="slider-group">
+                <div class="slider-row">
+                    <label>X</label>
+                    <input type="range" min="-2" max="2" step="0.05" value="0"
+                        oninput="updateSelectedCharmPosition('x', this.value)">
+                    <span id="c-pos-val-x" class="slider-val">0</span>
+                </div>
+            </div>
+
+            <button onclick="deleteSelectedCharm()"
+                style="width:100%; background:#ff4444; color:white; border:none; padding:8px; border-radius:4px; margin-top:10px; cursor:pointer; font-size:11px; font-weight:bold;">
+                🗑️ SİL / DELETE
+            </button>
+        </div>
+
+    </div>
+
+    <div id="loading">
+        <div class="spinner"></div>
+        <div id="msg">ATÖLYE HAZIRLANIYOR...</div>
+    </div>
+
+    <div id="footer">PANDORA 3D VIEWER</div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+        import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+        // --- AYARLAR ---
+        const CHARM_FOLDER = './source/';
+        const BRACE_OBJ = './brace.obj';
+        const BRACELET_RADIUS = 3.8;
+        const CHARM_SCALE = 1.2;
+        const SKY_COLOR = 0x87CEEB;
+
+        // --- GLOBAL STATE ---
+        const allCharmMeshes = [];
+        let selectedCharm = null;
+
+        // --- SAHNE ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(SKY_COLOR);
+        scene.fog = new THREE.Fog(SKY_COLOR, 15, 60);
+
+        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 8, 14);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.5;
+        controls.maxPolarAngle = Math.PI / 2 - 0.05;
+
+        // --- SELECTION SETUP ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let selectionBox = new THREE.BoxHelper(new THREE.Mesh(), 0xffff00);
+        selectionBox.visible = false;
+        scene.add(selectionBox);
+
+        // --- IŞIKLAR ---
+        const lights = { bright: [], metal: [] };
+
+        // Bright Lights
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 2.0);
+        hemiLight.position.set(0, 20, 0);
+        lights.bright.push(hemiLight);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 3.0);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        lights.bright.push(dirLight);
+        scene.add(dirLight);
+
+        const fillLight = new THREE.DirectionalLight(0xffeedd, 1.5);
+        fillLight.position.set(-5, 5, -5);
+        lights.bright.push(fillLight);
+        scene.add(fillLight);
+
+        // Metal Lights
+        const spotLight = new THREE.SpotLight(0xffffff, 20);
+        spotLight.position.set(5, 15, 5);
+        spotLight.castShadow = true;
+        spotLight.visible = false;
+        lights.metal.push(spotLight);
+        scene.add(spotLight);
+
+        const rimLight = new THREE.DirectionalLight(0xccddff, 2);
+        rimLight.position.set(-5, 2, -10);
+        rimLight.visible = false;
+        lights.metal.push(rimLight);
+        scene.add(rimLight);
+
+        const ambientMetal = new THREE.AmbientLight(0xffffff, 0.2);
+        ambientMetal.visible = false;
+        lights.metal.push(ambientMetal);
+        scene.add(ambientMetal);
+
+        // --- GRUPLAR ---
+        const mainGroup = new THREE.Group();
+        scene.add(mainGroup);
+        const braceletGroup = new THREE.Group();
+        mainGroup.add(braceletGroup);
+        const charmsGroup = new THREE.Group();
+        braceletGroup.add(charmsGroup);
+
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.ShadowMaterial({ opacity: 0.2, color: 0x000000 }));
+        plane.rotation.x = -Math.PI / 2;
+        plane.position.y = -2.5;
+        plane.receiveShadow = true;
+        mainGroup.add(plane);
+
+        const loaders = { obj: new OBJLoader(), gltf: new GLTFLoader(), fbx: new FBXLoader() };
+        const uiMsg = document.getElementById('msg');
+        const uiLoading = document.getElementById('loading');
+
+        // --- FONKSİYONLAR ---
+
+        // GLOBAL ROTATION (Bilezik Tümü)
+        window.updateCharmRotation = function (axis, value) {
+            const rad = THREE.MathUtils.degToRad(value);
+            if (axis === 'x') mainGroup.rotation.x = rad;
+            if (axis === 'y') mainGroup.rotation.y = rad;
+            if (axis === 'z') mainGroup.rotation.z = rad;
+            document.getElementById(`rot-val-${axis}`).innerText = value + "°";
+        };
+
+        // GLOBAL POSITION (Bilezik Tümü)
+        window.updateCharmPosition = function (axis, value) {
+            if (axis === 'x') mainGroup.position.x = parseFloat(value);
+            if (axis === 'y') mainGroup.position.y = parseFloat(value);
+            if (axis === 'z') mainGroup.position.z = parseFloat(value);
+            document.getElementById(`pos-val-${axis}`).innerText = value;
+        };
+
+        // INDIVIDUAL SELECTION & CONTROL
+        window.selectCharm = function (object) {
+            // Find the top-level group for this charm inside 'charmsGroup'
+            // The structure is charmsGroup -> pivot -> mesh
+            // So we need to find the specific mesh object that we stored in allCharmMeshes
+
+            // However, our click might hit a child of the mesh.
+            let targetMesh = null;
+            object.traverseAncestors((ancestor) => {
+                if (allCharmMeshes.includes(ancestor)) targetMesh = ancestor;
+            });
+            if (allCharmMeshes.includes(object)) targetMesh = object;
+
+            if (targetMesh) {
+                selectedCharm = targetMesh;
+
+                // Show Highlight
+                selectionBox.setFromObject(selectedCharm);
+                selectionBox.visible = true;
+
+                // Enable UI
+                const ui = document.getElementById('charm-controls');
+                ui.style.opacity = '1';
+                ui.style.pointerEvents = 'auto';
+
+                // Update UI values
+                document.getElementById('selected-charm-name').innerText = selectedCharm.userData.filename || "Charm";
+
+                document.getElementById('c-rot-val-y').innerText = Math.round(THREE.MathUtils.radToDeg(selectedCharm.rotation.y)) + "°";
+                document.getElementById('c-rot-val-z').innerText = Math.round(THREE.MathUtils.radToDeg(selectedCharm.rotation.z)) + "°";
+
+                // For X position (sliding along the bracelet essentially, but relative to pivot)
+                // Actually, moving 'x' inside the pivot moves it IN/OUT radially if pivot is rotated.
+                // Or if we move it along Z relative to Pivot? 
+                // Let's assume the user wants to tweak local position.
+                document.getElementById('c-pos-val-x').innerText = selectedCharm.position.x.toFixed(2);
+
+                // Stop global auto-rotate to focus
+                controls.autoRotate = false;
+            } else {
+                deselectCharm();
+            }
+        };
+
+        function deselectCharm() {
+            selectedCharm = null;
+            selectionBox.visible = false;
+            const ui = document.getElementById('charm-controls');
+            ui.style.opacity = '0.5';
+            ui.style.pointerEvents = 'none';
+            document.getElementById('selected-charm-name').innerText = "(Bir charm seçin)";
+            controls.autoRotate = true;
+        }
+
+        window.updateSelectedCharmRotation = function (axis, value) {
+            if (!selectedCharm) return;
+            const rad = THREE.MathUtils.degToRad(value);
+            if (axis === 'y') selectedCharm.rotation.y = rad;
+            if (axis === 'z') selectedCharm.rotation.z = rad;
+            document.getElementById(`c-rot-val-${axis}`).innerText = value + "°";
+            selectionBox.update();
+        };
+
+        window.updateSelectedCharmPosition = function (axis, value) {
+            if (!selectedCharm) return;
+            if (axis === 'x') selectedCharm.position.x = parseFloat(value);
+            // Y and Z might not make sense if we want to keep it on the bracelet ring
+            document.getElementById(`c-pos-val-${axis}`).innerText = value;
+            selectionBox.update();
+        };
+
+        window.deleteSelectedCharm = async function () {
+            if (!selectedCharm) return;
+            if (!confirm("Are you sure you want to delete this charm?")) return;
+
+            const filename = selectedCharm.userData.filename;
+
+            try {
+                const res = await fetch(`/api/delete?filename=${filename}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error("Delete failed");
+
+                // Remove from scene
+                const pivot = selectedCharm.parent;
+                pivot.remove(selectedCharm);
+                charmsGroup.remove(pivot); // Remove the pivot too to clean up
+
+                // Remove from array
+                const idx = allCharmMeshes.indexOf(selectedCharm);
+                if (idx > -1) allCharmMeshes.splice(idx, 1);
+
+                deselectCharm();
+
+            } catch (e) {
+                alert("Error deleting file: " + e.message);
+            }
+        };
+
+        // MOUSE CLICK HANDLER for Selection
+        window.addEventListener('mousedown', (event) => {
+            // Ignore clicks on UI
+            if (event.target.closest('#controls')) return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(charmsGroup.children, true);
+
+            if (intersects.length > 0) {
+                window.selectCharm(intersects[0].object);
+            } else {
+                // Should we deselect if clicked on empty space? Maybe not, annoying.
+                // deselectCharm();
+            }
+        });
+
+
+        // 3. STİL DEĞİŞTİRME
+        const STYLE_PARAMS = {
+            bright: { metalness: 0.6, roughness: 0.15, exposure: 1.2, envInt: 1.5 },
+            metal: { metalness: 1.0, roughness: 0.1, exposure: 0.8, envInt: 1.0 }
+        };
+
+        window.switchStyle = function (styleName) {
+            const params = STYLE_PARAMS[styleName];
+            lights.bright.forEach(l => l.visible = (styleName === 'bright'));
+            lights.metal.forEach(l => l.visible = (styleName === 'metal'));
+            renderer.toneMappingExposure = params.exposure;
+
+            mainGroup.traverse(child => {
+                if (child.isMesh && child.material) {
+                    const hasTexture = child.material.map ? true : false;
+                    child.material.metalness = hasTexture ? (styleName === 'bright' ? 0.5 : 0.8) : params.metalness;
+                    child.material.color.setHex(0xffffff);
+                    child.material.roughness = params.roughness;
+                    child.material.envMapIntensity = params.envInt;
+                    child.material.needsUpdate = true;
+                }
+            });
+        };
+
+        init();
+
+        async function init() {
+            try {
+                uiMsg.innerText = "BİLEKLİK İŞLENİYOR...";
+                await loadMainBracelet();
+                uiMsg.innerText = "CHARMLAR HAZIRLANIYOR...";
+                const charmFiles = await scanSourceFolder();
+                if (charmFiles.length > 0) await loadAndArrangeCharms(charmFiles);
+                window.switchStyle('bright');
+                uiMsg.innerText = "HAZIR!";
+                setTimeout(() => { uiLoading.style.opacity = 0; setTimeout(() => uiLoading.remove(), 500); }, 800);
+            } catch (error) { console.error(error); uiMsg.innerText = "HATA"; }
+        }
+
+        function loadMainBracelet() {
+            return new Promise((resolve) => {
+                loaders.obj.load(BRACE_OBJ, (obj) => {
+                    const box = new THREE.Box3().setFromObject(obj);
+                    const size = box.getSize(new THREE.Vector3());
+                    if (Math.max(size.x, size.y, size.z) > 0) {
+                        const scale = (BRACELET_RADIUS * 2.1) / Math.max(size.x, size.y, size.z);
+                        obj.scale.set(scale, scale, scale);
+                        obj.position.sub(new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3()));
+                        obj.rotation.x = -Math.PI / 2;
+                    }
+                    obj.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; if (c.geometry) c.geometry.computeVertexNormals(); c.material = new THREE.MeshStandardMaterial({ color: 0xffffff }); } });
+                    braceletGroup.add(obj);
+                    resolve();
+                }, undefined, () => resolve());
+            });
+        }
+
+        async function scanSourceFolder() {
+            try {
+                const response = await fetch(CHARM_FOLDER);
+                const text = await response.text();
+                const parser = new DOMParser();
+                return Array.from(parser.parseFromString(text, 'text/html').querySelectorAll('a'))
+                    .map(link => link.getAttribute('href'))
+                    .filter(href => href.match(/\.(glb|gltf|fbx|obj)$/i))
+                    .map(href => CHARM_FOLDER + href.split('/').pop());
+            } catch (error) { return []; }
+        }
+
+        async function loadAndArrangeCharms(fileList) {
+            const uniqueFiles = [...new Set(fileList)];
+            const angleStep = (Math.PI * 2) / uniqueFiles.length;
+
+            for (let i = 0; i < uniqueFiles.length; i++) {
+                const url = uniqueFiles[i];
+                const mesh = await loadModelSmart(url);
+                if (mesh) {
+                    // Extract filename for identification
+                    const filename = url.split('/').pop();
+                    mesh.userData.filename = filename;
+
+                    const angle = i * angleStep;
+                    const pivot = new THREE.Object3D();
+                    pivot.position.x = Math.cos(angle) * BRACELET_RADIUS;
+                    pivot.position.z = Math.sin(angle) * BRACELET_RADIUS;
+                    pivot.rotation.y = -angle;
+
+                    // Charmları listeye ekle
+                    allCharmMeshes.push(mesh);
+
+                    // Pivot'a ekle
+                    pivot.add(mesh);
+                    charmsGroup.add(pivot);
+                }
+            }
+        }
+
+        function loadModelSmart(url) {
+            return new Promise((resolve) => {
+                const ext = url.split('.').pop().toLowerCase();
+                const loader = (ext === 'fbx') ? loaders.fbx : (ext === 'obj' ? loaders.obj : loaders.gltf);
+                loader.load(url, (data) => {
+                    let model = data.scene || data;
+                    const box = new THREE.Box3().setFromObject(model);
+                    const size = box.getSize(new THREE.Vector3());
+                    if (Math.max(size.x, size.y, size.z) > 0) {
+                        const scale = CHARM_SCALE / Math.max(size.x, size.y, size.z);
+                        model.scale.set(scale, scale, scale);
+                        model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()).multiplyScalar(scale));
+                        model.position.y -= new THREE.Box3().setFromObject(model).max.y;
+                    }
+                    model.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; if (!c.material) c.material = new THREE.MeshStandardMaterial({ color: 0xffffff }); } });
+                    resolve(model);
+                }, undefined, () => resolve(null));
+            });
+        }
+
+        function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
+        animate();
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+    </script>
+</body>
+
+</html>
