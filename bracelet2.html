@@ -293,29 +293,6 @@
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
         import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-
-        // --- AYARLAR ---
-        const CHARM_FOLDER = './source/';
-        const BRACE_OBJ = './brace.obj';
-        const BRACELET_RADIUS = 3.8;
-        const CHARM_SCALE = 1.2;
-        const SKY_COLOR = 0x87CEEB;
-
-        // --- GLOBAL STATE ---
-        const allCharmMeshes = [];
-        let selectedCharm = null;
-
-        // --- SAHNE ---
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(SKY_COLOR);
-        scene.fog = new THREE.Fog(SKY_COLOR, 15, 60);
-
-        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.set(0, 8, 14);
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.2;
         renderer.shadowMap.enabled = true;
@@ -467,59 +444,40 @@
             document.getElementById('selected-charm-name').innerText = "(Bir charm seçin)";
             controls.autoRotate = true;
         }
+        if (!confirm("Are you sure you want to delete this charm?")) return;
 
-        window.updateSelectedCharmRotation = function (axis, value) {
-            if (!selectedCharm) return;
-            const rad = THREE.MathUtils.degToRad(value);
-            if (axis === 'y') selectedCharm.rotation.y = rad;
-            if (axis === 'z') selectedCharm.rotation.z = rad;
-            document.getElementById(`c-rot-val-${axis}`).innerText = value + "°";
-            selectionBox.update();
-        };
+        const filename = selectedCharm.userData.filename;
+        const isLocal = selectedCharm.userData.isLocal;
+        const localId = selectedCharm.userData.localId;
 
-        window.updateSelectedCharmPosition = function (axis, value) {
-            if (!selectedCharm) return;
-            if (axis === 'x') selectedCharm.position.x = parseFloat(value);
-            document.getElementById(`c-pos-val-${axis}`).innerText = value;
-            selectionBox.update();
-        };
+        try {
+            if (isLocal && localId) {
+                await deleteCharmFromDB(localId);
+            } else {
+                await fetch(`/api/delete?filename=${filename}`, { method: 'DELETE' });
+            }
 
-        window.deleteSelectedCharm = async function () {
-            if (!selectedCharm) return;
-            if (!confirm("Are you sure you want to delete this charm?")) return;
+            const pivot = selectedCharm.parent;
+            pivot.remove(selectedCharm);
+            charmsGroup.remove(pivot);
 
-            const filename = selectedCharm.userData.filename;
-            const isLocal = selectedCharm.userData.isLocal;
-            const localId = selectedCharm.userData.localId;
+            const idx = allCharmMeshes.indexOf(selectedCharm);
+            if (idx > -1) allCharmMeshes.splice(idx, 1);
 
-            try {
-                if (isLocal && localId) {
-                    await deleteCharmFromDB(localId);
-                } else {
-                    await fetch(`/api/delete?filename=${filename}`, { method: 'DELETE' });
-                }
+            deselectCharm();
+        } catch (e) {
+            console.error(e);
+            alert("Charm removed from scene, but storage delete might have failed.");
 
-                const pivot = selectedCharm.parent;
+            const pivot = selectedCharm.parent;
+            if (pivot) {
                 pivot.remove(selectedCharm);
                 charmsGroup.remove(pivot);
-
-                const idx = allCharmMeshes.indexOf(selectedCharm);
-                if (idx > -1) allCharmMeshes.splice(idx, 1);
-
-                deselectCharm();
-            } catch (e) {
-                console.error(e);
-                alert("Charm removed from scene, but storage delete might have failed.");
-
-                const pivot = selectedCharm.parent;
-                if (pivot) {
-                    pivot.remove(selectedCharm);
-                    charmsGroup.remove(pivot);
-                }
-                const idx = allCharmMeshes.indexOf(selectedCharm);
-                if (idx > -1) allCharmMeshes.splice(idx, 1);
-                deselectCharm();
             }
+            const idx = allCharmMeshes.indexOf(selectedCharm);
+            if (idx > -1) allCharmMeshes.splice(idx, 1);
+            deselectCharm();
+        }
         };
 
         window.addEventListener('mousedown', (event) => {
@@ -555,170 +513,15 @@
                 }, undefined, () => resolve(null));
             });
         }
+        scene.fog.color.set(style === 'bright' ? SKY_COLOR : 0x111111);
 
-        function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
-        animate();
-        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+        // Toggle Lights
+        lights.bright.forEach(l => l.visible = (style === 'bright'));
+        lights.metal.forEach(l => l.visible = (style === 'metal'));
 
-        // --- DATABASE FUNCTIONS ---
-        const STORE_NAME = 'charms';
-        function openDB() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open('PandoraDB', 1);
-                request.onupgradeneeded = (event) => {
-                    const db = event.target.result;
-                    if (!db.objectStoreNames.contains(STORE_NAME)) {
-                        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-                    }
-                };
-                request.onsuccess = (event) => resolve(event.target.result);
-                request.onerror = (event) => reject(event.target.error);
-            });
-        }
-
-        async function getCharmsFromDB() {
-            try {
-                const db = await openDB();
-                return new Promise((resolve, reject) => {
-                    const tx = db.transaction(STORE_NAME, 'readonly');
-                    const store = tx.objectStore(STORE_NAME);
-                    const req = store.getAll();
-                    req.onsuccess = () => resolve(req.result);
-                    req.onerror = () => reject(req.error);
-                });
-            } catch (e) {
-                console.error("DB Error:", e);
-                return [];
-            }
-        }
-
-        async function deleteCharmFromDB(id) {
-            const db = await openDB();
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(STORE_NAME, 'readwrite');
-                const store = tx.objectStore(STORE_NAME);
-                const req = store.delete(id);
-                req.onsuccess = () => resolve();
-                req.onerror = () => reject(req.error);
-            });
-        }
-
-        // --- CONTENT LOADING ---
-        async function loadMainBracelet() {
-            return new Promise((resolve, reject) => {
-                loaders.obj.load(BRACE_OBJ, (obj) => {
-                    obj.scale.set(1.5, 1.5, 1.5);
-                    obj.rotation.x = Math.PI / 2;
-                    obj.traverse((child) => {
-                        if (child.isMesh) {
-                            child.material = new THREE.MeshStandardMaterial({
-                                color: 0xC0C0C0,
-                                metalness: 0.9,
-                                roughness: 0.1
-                            });
-                            child.castShadow = true;
-                            child.receiveShadow = true;
-                        }
-                    });
-                    const box = new THREE.Box3().setFromObject(obj);
-                    const center = box.getCenter(new THREE.Vector3());
-                    obj.position.sub(center);
-                    braceletGroup.add(obj);
-                    resolve(obj);
-                }, undefined, (err) => {
-                    console.error("Brace load error:", err);
-                    // Create fallback torus if brace.obj fails
-                    const geometry = new THREE.TorusGeometry(3.5, 0.1, 16, 100);
-                    const material = new THREE.MeshStandardMaterial({ color: 0xC0C0C0, metalness: 0.9, roughness: 0.1 });
-                    const torus = new THREE.Mesh(geometry, material);
-                    torus.rotation.x = Math.PI / 2;
-                    braceletGroup.add(torus);
-                    resolve(torus);
-                });
-            });
-        }
-
-        async function scanSourceFolder() {
-            try {
-                // Use the Vercel-compatible API endpoint
-                const response = await fetch('/api/list');
-                if (!response.ok) throw new Error('List API failed');
-                const files = await response.json();
-                return files;
-            } catch (error) {
-                console.warn("Could not load static charms via API, trying fallback...", error);
-                return [];
-            }
-        }
-
-        async function loadAndArrangeCharms(items) {
-            const count = items.length;
-            if (count === 0) return;
-
-            const angleStep = (Math.PI * 2) / count;
-
-            for (let i = 0; i < count; i++) {
-                const item = items[i];
-                let modelUrl;
-                let isLocal = false;
-                let localId = null;
-                let filename = '';
-
-                if (item.type === 'db') {
-                    // Convert ArrayBuffer to Blob URL
-                    const blob = new Blob([item.val.buffer], { type: 'application/octet-stream' });
-                    modelUrl = URL.createObjectURL(blob);
-                    isLocal = true;
-                    localId = item.val.id;
-                    filename = item.val.filename;
-                } else {
-                    modelUrl = item.val;
-                    filename = modelUrl.split('/').pop();
-                }
-
-                const model = await loadModelSmart(modelUrl);
-                if (model) {
-                    const angle = i * angleStep;
-                    const x = Math.cos(angle) * BRACELET_RADIUS;
-                    const z = Math.sin(angle) * BRACELET_RADIUS;
-
-                    const pivot = new THREE.Group();
-                    pivot.rotation.y = -angle;
-                    pivot.position.set(0, 0, 0);
-
-                    // Position the model relative to pivot
-                    model.position.set(x, 0, z);
-
-                    // Rotate model to face outward
-                    model.rotation.y = Math.PI / 2;
-
-                    // Store metadata for identification
-                    model.userData = {
-                        isCharm: true,
-                        isLocal: isLocal,
-                        localId: localId,
-                        filename: filename
-                    };
-
-                    pivot.add(model);
-                    charmsGroup.add(pivot);
-                    allCharmMeshes.push(model);
-                }
-            }
-        }
-
-        // --- STYLE SWITCHER ---
-        window.switchStyle = function (style) {
-            scene.background = new THREE.Color(style === 'bright' ? SKY_COLOR : 0x111111);
-            scene.fog.color.set(style === 'bright' ? SKY_COLOR : 0x111111);
-
-            // Toggle Lights
-            lights.bright.forEach(l => l.visible = (style === 'bright'));
-            lights.metal.forEach(l => l.visible = (style === 'metal'));
-
-            // Toggle Floor
-            plane.material.color.set(style === 'bright' ? 0x000000 : 0x333333);
-            plane.material.opacity = style === 'bright' ? 0.2 : 0.5;
+        // Toggle Floor
+        plane.material.color.set(style === 'bright' ? 0x000000 : 0x333333);
+        plane.material.opacity = style === 'bright' ? 0.2 : 0.5;
         };
 
         // --- INIT SEQUENCE ---
