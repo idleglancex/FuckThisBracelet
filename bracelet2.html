@@ -521,21 +521,54 @@
 
         function loadModelSmart(url) {
             return new Promise((resolve) => {
+                console.log("Loading Smart:", url);
                 const ext = url.split('.').pop().toLowerCase();
                 const loader = (ext === 'fbx') ? loaders.fbx : (ext === 'obj' ? loaders.obj : loaders.gltf);
+
                 loader.load(url, (data) => {
                     let model = data.scene || data;
+
+                    // Force clean material to avoid visual glitches or 404s on missing textures
+                    const cleanMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        metalness: 0.4,
+                        roughness: 0.5
+                    });
+
+                    model.traverse(c => {
+                        if (c.isMesh) {
+                            c.castShadow = true;
+                            c.receiveShadow = true;
+                            // Completely replace material to ensure visibility and prevent 404s on textures
+                            c.material = cleanMaterial;
+                        }
+                    });
+
                     const box = new THREE.Box3().setFromObject(model);
                     const size = box.getSize(new THREE.Vector3());
+                    console.log(`Loaded ${url}: Size`, size);
+
                     if (Math.max(size.x, size.y, size.z) > 0) {
                         const scale = CHARM_SCALE / Math.max(size.x, size.y, size.z);
                         model.scale.set(scale, scale, scale);
-                        model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()).multiplyScalar(scale));
-                        model.position.y -= new THREE.Box3().setFromObject(model).max.y;
+
+                        // Recalculate center after scaling? No, logic was:
+                        // model.position.sub(center * scale)
+                        const center = new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3());
+                        // We want to center it at 0,0,0
+                        model.position.sub(center);
+
+                        // Align bottom to 0? 
+                        // model.position.y -= ... 
+                        // Actually, let's just Center it on Y too for the "Holder" logic.
+                        // If it sits in a bead holder, centering is usually safer.
                     }
-                    model.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; if (!c.material) c.material = new THREE.MeshStandardMaterial({ color: 0xffffff }); } });
+
                     resolve(model);
-                }, undefined, () => resolve(null));
+                }, undefined, (err) => {
+                    console.error("Error loading " + url, err);
+                    resolve(null);
+                });
             });
         }
 
