@@ -701,22 +701,32 @@
             console.log("INIT STARTED");
             try {
                 uiMsg.innerText = "BİLEKLİK İŞLENİYOR...";
-                await loadMainBracelet();
+
+                const brace = await loadMainBracelet();
+                console.log("Main Bracelet Loaded:", brace);
+                if (brace) console.log("Brace Children:", brace.children.length);
 
                 uiMsg.innerText = "CHARMLAR HAZIRLANIYOR...";
 
                 // Load Static Files (API)
                 const staticFiles = await scanSourceFolder();
+                console.log("Static Files found:", staticFiles);
 
                 // Load Local DB Files (IndexedDB)
                 const localCharms = await getCharmsFromDB();
+                console.log("DB Charms found:", localCharms);
 
                 const allItems = [
                     ...staticFiles.map(url => ({ type: 'url', val: url })),
                     ...localCharms.map(item => ({ type: 'db', val: item }))
                 ];
 
+                console.log("Total items to process:", allItems.length);
+                console.log("Items:", JSON.stringify(allItems));
+
                 if (allItems.length > 0) await loadAndArrangeCharms(allItems);
+
+                console.log("Checking Scene:", scene.children);
 
                 window.switchStyle('bright');
                 uiMsg.innerText = "HAZIR!";
