@@ -515,15 +515,20 @@
                 }, undefined, () => resolve(null));
             });
         }
-        scene.fog.color.set(style === 'bright' ? SKY_COLOR : 0x111111);
+        }
 
-        // Toggle Lights
-        lights.bright.forEach(l => l.visible = (style === 'bright'));
-        lights.metal.forEach(l => l.visible = (style === 'metal'));
+        // --- STYLE SWITCHER ---
+        window.switchStyle = function (style) {
+            scene.background = new THREE.Color(style === 'bright' ? SKY_COLOR : 0x111111);
+            scene.fog.color.set(style === 'bright' ? SKY_COLOR : 0x111111);
 
-        // Toggle Floor
-        plane.material.color.set(style === 'bright' ? 0x000000 : 0x333333);
-        plane.material.opacity = style === 'bright' ? 0.2 : 0.5;
+            // Toggle Lights
+            lights.bright.forEach(l => l.visible = (style === 'bright'));
+            lights.metal.forEach(l => l.visible = (style === 'metal'));
+
+            // Toggle Floor
+            plane.material.color.set(style === 'bright' ? 0x000000 : 0x333333);
+            plane.material.opacity = style === 'bright' ? 0.2 : 0.5;
         };
 
         // --- INIT SEQUENCE ---
