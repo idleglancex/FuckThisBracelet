@@ -559,6 +559,202 @@
         function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
         animate();
         window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+        // --- DATABASE FUNCTIONS ---
+        const STORE_NAME = 'charms';
+        function openDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('PandoraDB', 1);
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                    }
+                };
+                request.onsuccess = (event) => resolve(event.target.result);
+                request.onerror = (event) => reject(event.target.error);
+            });
+        }
+
+        async function getCharmsFromDB() {
+            try {
+                const db = await openDB();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORE_NAME, 'readonly');
+                    const store = tx.objectStore(STORE_NAME);
+                    const req = store.getAll();
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+            } catch (e) {
+                console.error("DB Error:", e);
+                return [];
+            }
+        }
+
+        async function deleteCharmFromDB(id) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                const req = store.delete(id);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        // --- CONTENT LOADING ---
+        async function loadMainBracelet() {
+            return new Promise((resolve, reject) => {
+                loaders.obj.load(BRACE_OBJ, (obj) => {
+                    obj.scale.set(1.5, 1.5, 1.5);
+                    obj.rotation.x = Math.PI / 2;
+                    obj.traverse((child) => {
+                        if (child.isMesh) {
+                            child.material = new THREE.MeshStandardMaterial({
+                                color: 0xC0C0C0,
+                                metalness: 0.9,
+                                roughness: 0.1
+                            });
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                    });
+                    const box = new THREE.Box3().setFromObject(obj);
+                    const center = box.getCenter(new THREE.Vector3());
+                    obj.position.sub(center);
+                    braceletGroup.add(obj);
+                    resolve(obj);
+                }, undefined, (err) => {
+                    console.error("Brace load error:", err);
+                    // Create fallback torus if brace.obj fails
+                    const geometry = new THREE.TorusGeometry(3.5, 0.1, 16, 100);
+                    const material = new THREE.MeshStandardMaterial({ color: 0xC0C0C0, metalness: 0.9, roughness: 0.1 });
+                    const torus = new THREE.Mesh(geometry, material);
+                    torus.rotation.x = Math.PI / 2;
+                    braceletGroup.add(torus);
+                    resolve(torus);
+                });
+            });
+        }
+
+        async function scanSourceFolder() {
+            try {
+                // Use the Vercel-compatible API endpoint
+                const response = await fetch('/api/list');
+                if (!response.ok) throw new Error('List API failed');
+                const files = await response.json();
+                return files;
+            } catch (error) {
+                console.warn("Could not load static charms via API, trying fallback...", error);
+                return [];
+            }
+        }
+
+        async function loadAndArrangeCharms(items) {
+            const count = items.length;
+            if (count === 0) return;
+
+            const angleStep = (Math.PI * 2) / count;
+
+            for (let i = 0; i < count; i++) {
+                const item = items[i];
+                let modelUrl;
+                let isLocal = false;
+                let localId = null;
+                let filename = '';
+
+                if (item.type === 'db') {
+                    // Convert ArrayBuffer to Blob URL
+                    const blob = new Blob([item.val.buffer], { type: 'application/octet-stream' });
+                    modelUrl = URL.createObjectURL(blob);
+                    isLocal = true;
+                    localId = item.val.id;
+                    filename = item.val.filename;
+                } else {
+                    modelUrl = item.val;
+                    filename = modelUrl.split('/').pop();
+                }
+
+                const model = await loadModelSmart(modelUrl);
+                if (model) {
+                    const angle = i * angleStep;
+                    const x = Math.cos(angle) * BRACELET_RADIUS;
+                    const z = Math.sin(angle) * BRACELET_RADIUS;
+
+                    const pivot = new THREE.Group();
+                    pivot.rotation.y = -angle;
+                    pivot.position.set(0, 0, 0);
+
+                    // Position the model relative to pivot
+                    model.position.set(x, 0, z);
+
+                    // Rotate model to face outward
+                    model.rotation.y = Math.PI / 2;
+
+                    // Store metadata for identification
+                    model.userData = {
+                        isCharm: true,
+                        isLocal: isLocal,
+                        localId: localId,
+                        filename: filename
+                    };
+
+                    pivot.add(model);
+                    charmsGroup.add(pivot);
+                    allCharmMeshes.push(model);
+                }
+            }
+        }
+
+        // --- STYLE SWITCHER ---
+        window.switchStyle = function (style) {
+            scene.background = new THREE.Color(style === 'bright' ? SKY_COLOR : 0x111111);
+            scene.fog.color.set(style === 'bright' ? SKY_COLOR : 0x111111);
+
+            // Toggle Lights
+            lights.bright.forEach(l => l.visible = (style === 'bright'));
+            lights.metal.forEach(l => l.visible = (style === 'metal'));
+
+            // Toggle Floor
+            plane.material.color.set(style === 'bright' ? 0x000000 : 0x333333);
+            plane.material.opacity = style === 'bright' ? 0.2 : 0.5;
+        };
+
+        // --- INIT SEQUENCE ---
+        async function init() {
+            console.log("INIT STARTED");
+            try {
+                uiMsg.innerText = "BİLEKLİK İŞLENİYOR...";
+                await loadMainBracelet();
+
+                uiMsg.innerText = "CHARMLAR HAZIRLANIYOR...";
+
+                // Load Static Files (API)
+                const staticFiles = await scanSourceFolder();
+
+                // Load Local DB Files (IndexedDB)
+                const localCharms = await getCharmsFromDB();
+
+                const allItems = [
+                    ...staticFiles.map(url => ({ type: 'url', val: url })),
+                    ...localCharms.map(item => ({ type: 'db', val: item }))
+                ];
+
+                if (allItems.length > 0) await loadAndArrangeCharms(allItems);
+
+                window.switchStyle('bright');
+                uiMsg.innerText = "HAZIR!";
+                console.log("INIT DONE");
+                setTimeout(() => { uiLoading.style.opacity = 0; setTimeout(() => uiLoading.remove(), 500); }, 800);
+            } catch (error) {
+                console.error("INIT ERROR:", error);
+                uiMsg.innerText = "HATA: " + error.message;
+            }
+        }
+
+        // Start
+        init();
     </script>
 </body>
 
