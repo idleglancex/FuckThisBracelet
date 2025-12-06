@@ -187,20 +187,7 @@
             </div>
         </div>
 
-        <!-- 1. Görünüm Modu -->
-        <div>
-            <div class="section-title">Görünüm Modu</div>
-            <div class="style-group">
-                <label class="radio-label">
-                    <input type="radio" name="style" value="bright" checked onchange="switchStyle('bright')">
-                    Bright
-                </label>
-                <label class="radio-label">
-                    <input type="radio" name="style" value="metal" onchange="switchStyle('metal')">
-                    Metal
-                </label>
-            </div>
-        </div>
+
 
         <!-- 4. Seçili Charm Kontrolü -->
         <div id="charm-controls"
@@ -214,6 +201,12 @@
             <!-- Charm Rotasyon -->
             <div class="section-title">Charm Döndür</div>
             <div class="slider-group">
+                <div class="slider-row">
+                    <label>X</label>
+                    <input type="range" min="-180" max="180" value="0"
+                        oninput="updateSelectedCharmRotation('x', this.value)">
+                    <span id="c-rot-val-x" class="slider-val">0°</span>
+                </div>
                 <div class="slider-row">
                     <label>Y</label>
                     <input type="range" min="-180" max="180" value="0"
@@ -236,6 +229,18 @@
                     <input type="range" min="-2" max="2" step="0.05" value="0"
                         oninput="updateSelectedCharmPosition('x', this.value)">
                     <span id="c-pos-val-x" class="slider-val">0</span>
+                </div>
+                <div class="slider-row">
+                    <label>Y</label>
+                    <input type="range" min="-2" max="2" step="0.05" value="0"
+                        oninput="updateSelectedCharmPosition('y', this.value)">
+                    <span id="c-pos-val-y" class="slider-val">0</span>
+                </div>
+                <div class="slider-row">
+                    <label>Z</label>
+                    <input type="range" min="-2" max="2" step="0.05" value="0"
+                        oninput="updateSelectedCharmPosition('z', this.value)">
+                    <span id="c-pos-val-z" class="slider-val">0</span>
                 </div>
             </div>
 
@@ -365,12 +370,42 @@
         // --- FONKSİYONLAR ---
 
         // INDIVIDUAL SELECTION & CONTROL
+        window.updateSelectedCharmRotation = function (axis, value) {
+            if (!selectedCharm) return;
+            const rad = THREE.MathUtils.degToRad(parseFloat(value));
+
+            if (axis === 'x') selectedCharm.rotation.x = rad;
+            if (axis === 'y') selectedCharm.rotation.y = rad;
+            if (axis === 'z') selectedCharm.rotation.z = rad;
+
+            document.getElementById(`c-rot-val-${axis}`).innerText = value + "°";
+            selectionBox.update();
+        };
+
+        window.updateSelectedCharmPosition = function (axis, value) {
+            if (!selectedCharm) return;
+            const val = parseFloat(value);
+
+            // X corresponds to moving ALONG the bracelet (if we wanted that)
+            // But here, selectedCharm is the model inside the holder.
+            // Moving X/Y/Z moves it relative to the "bead hole".
+
+            if (axis === 'x') selectedCharm.position.x = val;
+            if (axis === 'y') selectedCharm.position.y = val;
+            if (axis === 'z') selectedCharm.position.z = val;
+
+            document.getElementById(`c-pos-val-${axis}`).innerText = val;
+            selectionBox.update();
+        };
+
         window.selectCharm = function (object) {
             // Find the top-level group for this charm inside 'charmsGroup'
-            // The structure is charmsGroup -> pivot -> mesh
-            // So we need to find the specific mesh object that we stored in allCharmMeshes
+            // The structure is charmsGroup -> pivot -> holder -> mesh
+            // Wait, logic says: 
+            // pivot.add(holder); holder.add(model);
 
-            // However, our click might hit a child of the mesh.
+            // So if we click the model, we want to select IT.
+
             let targetMesh = null;
             object.traverseAncestors((ancestor) => {
                 if (allCharmMeshes.includes(ancestor)) targetMesh = ancestor;
@@ -392,14 +427,24 @@
                 // Update UI values
                 document.getElementById('selected-charm-name').innerText = selectedCharm.userData.filename || "Charm";
 
+                // Update sliders to match current state
+                document.getElementById('c-rot-val-x').innerText = Math.round(THREE.MathUtils.radToDeg(selectedCharm.rotation.x)) + "°";
                 document.getElementById('c-rot-val-y').innerText = Math.round(THREE.MathUtils.radToDeg(selectedCharm.rotation.y)) + "°";
                 document.getElementById('c-rot-val-z').innerText = Math.round(THREE.MathUtils.radToDeg(selectedCharm.rotation.z)) + "°";
 
-                // For X position (sliding along the bracelet essentially, but relative to pivot)
-                // Actually, moving 'x' inside the pivot moves it IN/OUT radially if pivot is rotated.
-                // Or if we move it along Z relative to Pivot? 
-                // Let's assume the user wants to tweak local position.
+                // Set slider input values
+                document.querySelector('input[oninput="updateSelectedCharmRotation(\'x\', this.value)"]').value = Math.round(THREE.MathUtils.radToDeg(selectedCharm.rotation.x));
+                document.querySelector('input[oninput="updateSelectedCharmRotation(\'y\', this.value)"]').value = Math.round(THREE.MathUtils.radToDeg(selectedCharm.rotation.y));
+                document.querySelector('input[oninput="updateSelectedCharmRotation(\'z\', this.value)"]').value = Math.round(THREE.MathUtils.radToDeg(selectedCharm.rotation.z));
+
                 document.getElementById('c-pos-val-x').innerText = selectedCharm.position.x.toFixed(2);
+                document.getElementById('c-pos-val-y').innerText = selectedCharm.position.y.toFixed(2);
+                document.getElementById('c-pos-val-z').innerText = selectedCharm.position.z.toFixed(2);
+
+                document.querySelector('input[oninput="updateSelectedCharmPosition(\'x\', this.value)"]').value = selectedCharm.position.x;
+                document.querySelector('input[oninput="updateSelectedCharmPosition(\'y\', this.value)"]').value = selectedCharm.position.y;
+                document.querySelector('input[oninput="updateSelectedCharmPosition(\'z\', this.value)"]').value = selectedCharm.position.z;
+
 
                 // Stop global auto-rotate to focus
                 controls.autoRotate = false;
