@@ -480,7 +480,6 @@
         window.updateSelectedCharmPosition = function (axis, value) {
             if (!selectedCharm) return;
             if (axis === 'x') selectedCharm.position.x = parseFloat(value);
-            // Y and Z might not make sense if we want to keep it on the bracelet ring
             document.getElementById(`c-pos-val-${axis}`).innerText = value;
             selectionBox.update();
         };
@@ -490,31 +489,41 @@
             if (!confirm("Are you sure you want to delete this charm?")) return;
 
             const filename = selectedCharm.userData.filename;
+            const isLocal = selectedCharm.userData.isLocal;
+            const localId = selectedCharm.userData.localId;
 
             try {
-                const res = await fetch(`/api/delete?filename=${filename}`, { method: 'DELETE' });
-                if (!res.ok) throw new Error("Delete failed");
+                if (isLocal && localId) {
+                    await deleteCharmFromDB(localId);
+                } else {
+                    const res = await fetch(`/api/delete?filename=${filename}`, { method: 'DELETE' });
+                }
 
-                // Remove from scene
                 const pivot = selectedCharm.parent;
                 pivot.remove(selectedCharm);
-                charmsGroup.remove(pivot); // Remove the pivot too to clean up
+                charmsGroup.remove(pivot);
 
-                // Remove from array
                 const idx = allCharmMeshes.indexOf(selectedCharm);
                 if (idx > -1) allCharmMeshes.splice(idx, 1);
 
                 deselectCharm();
-
             } catch (e) {
-                alert("Error deleting file: " + e.message);
+                console.error(e);
+                alert("Charm removed from scene, but storage delete might have failed.");
+
+                const pivot = selectedCharm.parent;
+                if (pivot) {
+                    pivot.remove(selectedCharm);
+                    charmsGroup.remove(pivot);
+                }
+                const idx = allCharmMeshes.indexOf(selectedCharm);
+                if (idx > -1) allCharmMeshes.splice(idx, 1);
+                deselectCharm();
             }
         };
 
-        // MOUSE CLICK HANDLER for Selection
         window.addEventListener('mousedown', (event) => {
-            // Ignore clicks on UI
-            if (event.target.closest('#controls')) return;
+            if (event.target.closest('#controls') || event.target.closest('#charm-controls')) return;
 
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -524,109 +533,8 @@
 
             if (intersects.length > 0) {
                 window.selectCharm(intersects[0].object);
-            } else {
-                // Should we deselect if clicked on empty space? Maybe not, annoying.
-                // deselectCharm();
             }
         });
-
-
-        // 3. STİL DEĞİŞTİRME
-        const STYLE_PARAMS = {
-            bright: { metalness: 0.6, roughness: 0.15, exposure: 1.2, envInt: 1.5 },
-            metal: { metalness: 1.0, roughness: 0.1, exposure: 0.8, envInt: 1.0 }
-        };
-
-        window.switchStyle = function (styleName) {
-            const params = STYLE_PARAMS[styleName];
-            lights.bright.forEach(l => l.visible = (styleName === 'bright'));
-            lights.metal.forEach(l => l.visible = (styleName === 'metal'));
-            renderer.toneMappingExposure = params.exposure;
-
-            mainGroup.traverse(child => {
-                if (child.isMesh && child.material) {
-                    const hasTexture = child.material.map ? true : false;
-                    child.material.metalness = hasTexture ? (styleName === 'bright' ? 0.5 : 0.8) : params.metalness;
-                    child.material.color.setHex(0xffffff);
-                    child.material.roughness = params.roughness;
-                    child.material.envMapIntensity = params.envInt;
-                    child.material.needsUpdate = true;
-                }
-            });
-        };
-
-        init();
-
-        async function init() {
-            try {
-                uiMsg.innerText = "BİLEKLİK İŞLENİYOR...";
-                await loadMainBracelet();
-                uiMsg.innerText = "CHARMLAR HAZIRLANIYOR...";
-                const charmFiles = await scanSourceFolder();
-                if (charmFiles.length > 0) await loadAndArrangeCharms(charmFiles);
-                window.switchStyle('bright');
-                uiMsg.innerText = "HAZIR!";
-                setTimeout(() => { uiLoading.style.opacity = 0; setTimeout(() => uiLoading.remove(), 500); }, 800);
-            } catch (error) { console.error(error); uiMsg.innerText = "HATA"; }
-        }
-
-        function loadMainBracelet() {
-            return new Promise((resolve) => {
-                loaders.obj.load(BRACE_OBJ, (obj) => {
-                    const box = new THREE.Box3().setFromObject(obj);
-                    const size = box.getSize(new THREE.Vector3());
-                    if (Math.max(size.x, size.y, size.z) > 0) {
-                        const scale = (BRACELET_RADIUS * 2.1) / Math.max(size.x, size.y, size.z);
-                        obj.scale.set(scale, scale, scale);
-                        obj.position.sub(new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3()));
-                        obj.rotation.x = -Math.PI / 2;
-                    }
-                    obj.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; if (c.geometry) c.geometry.computeVertexNormals(); c.material = new THREE.MeshStandardMaterial({ color: 0xffffff }); } });
-                    braceletGroup.add(obj);
-                    resolve();
-                }, undefined, () => resolve());
-            });
-        }
-
-        async function scanSourceFolder() {
-            try {
-                const response = await fetch(CHARM_FOLDER);
-                const text = await response.text();
-                const parser = new DOMParser();
-                return Array.from(parser.parseFromString(text, 'text/html').querySelectorAll('a'))
-                    .map(link => link.getAttribute('href'))
-                    .filter(href => href.match(/\.(glb|gltf|fbx|obj)$/i))
-                    .map(href => CHARM_FOLDER + href.split('/').pop());
-            } catch (error) { return []; }
-        }
-
-        async function loadAndArrangeCharms(fileList) {
-            const uniqueFiles = [...new Set(fileList)];
-            const angleStep = (Math.PI * 2) / uniqueFiles.length;
-
-            for (let i = 0; i < uniqueFiles.length; i++) {
-                const url = uniqueFiles[i];
-                const mesh = await loadModelSmart(url);
-                if (mesh) {
-                    // Extract filename for identification
-                    const filename = url.split('/').pop();
-                    mesh.userData.filename = filename;
-
-                    const angle = i * angleStep;
-                    const pivot = new THREE.Object3D();
-                    pivot.position.x = Math.cos(angle) * BRACELET_RADIUS;
-                    pivot.position.z = Math.sin(angle) * BRACELET_RADIUS;
-                    pivot.rotation.y = -angle;
-
-                    // Charmları listeye ekle
-                    allCharmMeshes.push(mesh);
-
-                    // Pivot'a ekle
-                    pivot.add(mesh);
-                    charmsGroup.add(pivot);
-                }
-            }
-        }
 
         function loadModelSmart(url) {
             return new Promise((resolve) => {
