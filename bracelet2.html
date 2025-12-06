@@ -187,50 +187,18 @@
             </div>
         </div>
 
-        <!-- 2. Rotasyon Ayarı -->
+        <!-- 1. Görünüm Modu -->
         <div>
-            <div class="section-title">Döndür (Rotation)</div>
-            <div class="slider-group">
-                <div class="slider-row">
-                    <label>X</label>
-                    <input type="range" min="-180" max="180" value="-90" oninput="updateCharmRotation('x', this.value)">
-                    <span id="rot-val-x" class="slider-val">-90°</span>
-                </div>
-                <div class="slider-row">
-                    <label>Y</label>
-                    <input type="range" min="-180" max="180" value="90" oninput="updateCharmRotation('y', this.value)">
-                    <span id="rot-val-y" class="slider-val">90°</span>
-                </div>
-                <div class="slider-row">
-                    <label>Z</label>
-                    <input type="range" min="-180" max="180" value="0" oninput="updateCharmRotation('z', this.value)">
-                    <span id="rot-val-z" class="slider-val">0°</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- 3. Konum Ayarı -->
-        <div>
-            <div class="section-title">Kaydır (Position)</div>
-            <div class="slider-group">
-                <div class="slider-row">
-                    <label>X</label>
-                    <input type="range" min="-2" max="2" step="0.05" value="0"
-                        oninput="updateCharmPosition('x', this.value)">
-                    <span id="pos-val-x" class="slider-val">0</span>
-                </div>
-                <div class="slider-row">
-                    <label>Y</label>
-                    <input type="range" min="-2" max="2" step="0.05" value="-0.3"
-                        oninput="updateCharmPosition('y', this.value)">
-                    <span id="pos-val-y" class="slider-val">-0.3</span>
-                </div>
-                <div class="slider-row">
-                    <label>Z</label>
-                    <input type="range" min="-2" max="2" step="0.05" value="0"
-                        oninput="updateCharmPosition('z', this.value)">
-                    <span id="pos-val-z" class="slider-val">0</span>
-                </div>
+            <div class="section-title">Görünüm Modu</div>
+            <div class="style-group">
+                <label class="radio-label">
+                    <input type="radio" name="style" value="bright" checked onchange="switchStyle('bright')">
+                    Bright
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="style" value="metal" onchange="switchStyle('metal')">
+                    Metal
+                </label>
             </div>
         </div>
 
@@ -338,18 +306,6 @@
         selectionBox.visible = false;
         scene.add(selectionBox);
 
-        // --- DEBUG HELPERS ---
-        const axesHelper = new THREE.AxesHelper(10);
-        scene.add(axesHelper);
-
-        const debugCube = new THREE.Mesh(
-            new THREE.BoxGeometry(1, 1, 1),
-            new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true })
-        );
-        debugCube.position.set(0, 0, 0);
-        scene.add(debugCube);
-        console.log("Debug Cube added at 0,0,0");
-
         // --- IŞIKLAR ---
         const lights = { bright: [], metal: [] };
 
@@ -370,7 +326,6 @@
         lights.bright.push(fillLight);
         scene.add(fillLight);
 
-        // Metal Lights
         const spotLight = new THREE.SpotLight(0xffffff, 20);
         spotLight.position.set(5, 15, 5);
         spotLight.castShadow = true;
@@ -408,23 +363,6 @@
         const uiLoading = document.getElementById('loading');
 
         // --- FONKSİYONLAR ---
-
-        // GLOBAL ROTATION (Bilezik Tümü)
-        window.updateCharmRotation = function (axis, value) {
-            const rad = THREE.MathUtils.degToRad(value);
-            if (axis === 'x') mainGroup.rotation.x = rad;
-            if (axis === 'y') mainGroup.rotation.y = rad;
-            if (axis === 'z') mainGroup.rotation.z = rad;
-            document.getElementById(`rot-val-${axis}`).innerText = value + "°";
-        };
-
-        // GLOBAL POSITION (Bilezik Tümü)
-        window.updateCharmPosition = function (axis, value) {
-            if (axis === 'x') mainGroup.position.x = parseFloat(value);
-            if (axis === 'y') mainGroup.position.y = parseFloat(value);
-            if (axis === 'z') mainGroup.position.z = parseFloat(value);
-            document.getElementById(`pos-val-${axis}`).innerText = value;
-        };
 
         // INDIVIDUAL SELECTION & CONTROL
         window.selectCharm = function (object) {
