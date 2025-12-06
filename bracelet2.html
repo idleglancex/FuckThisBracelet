@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realistic Pandora Bracelet</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: radial-gradient(circle, #2b2b2b 0%, #1a1a1a 100%); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: white; }
+        
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        #header { margin-top: 20px; text-align: center; text-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        h1 { margin: 0; font-weight: 300; letter-spacing: 4px; }
+        p { font-size: 12px; color: #aaa; margin-top: 5px; }
+
+        .upload-btn {
+            pointer-events: auto;
+            background: #E91E63; color: white; border: none; padding: 12px 25px;
+            border-radius: 30px; font-weight: bold; cursor: pointer;
+            margin-top: 20px; box-shadow: 0 4px 15px rgba(233, 30, 99, 0.4);
+            transition: transform 0.2s, background 0.2s;
+        }
+        .upload-btn:hover { transform: scale(1.05); background: #C2185B; }
+        
+        #folder-input { display: none; }
+        #loading-msg { display: none; margin-top: 10px; color: #00bcd4; font-weight: bold; }
+    </style>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div id="header">
+            <h1>PANDORA COLLECTION</h1>
+            <p>Load your "outputs" folder</p>
+        </div>
+
+        <label class="upload-btn">
+            📂 Load "outputs" Folder
+            <input type="file" id="folder-input" webkitdirectory directory multiple>
+        </label>
+        
+        <div id="loading-msg">Crafting Jewelry...</div>
+    </div>
+
+    <script type="module">
+        // 1. ALL IMPORTS AT THE TOP
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+        // This is the correct import path for the Environment addon
+        import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+        // --- CONFIG ---
+        const BRACELET_RADIUS = 3.5;
+        const BRACELET_THICKNESS = 0.15;
+        const CHARM_SIZE = 1.2; 
+        
+        const silverMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xffffff, 
+            metalness: 1.0, 
+            roughness: 0.15,
+            envMapIntensity: 1.0
+        });
+
+        const scene = new THREE.Scene();
+
+        // --- RENDERER SETUP ---
+        let renderer;
+        try {
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        } catch (e) {
+            alert("WebGL Error: Please restart your browser.");
+            throw e;
+        }
+        
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        document.body.appendChild(renderer.domElement);
+
+        // --- ENVIRONMENT FIX ---
+        // Using the imported class 'RoomEnvironment'
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 10, 10);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.8;
+
+        // --- LIGHTS ---
+        scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+        
+        const spotLight = new THREE.SpotLight(0xffeebb, 10);
+        spotLight.position.set(5, 10, 5);
+        spotLight.castShadow = true;
+        spotLight.shadow.bias = -0.0001;
+        scene.add(spotLight);
+
+        const rimLight = new THREE.PointLight(0x4488ff, 5);
+        rimLight.position.set(-5, 0, -5);
+        scene.add(rimLight);
+
+        // --- BRACELET ---
+        const braceletGroup = new THREE.Group();
+        scene.add(braceletGroup);
+
+        // This creates the ring using MATH, so it cannot 404
+        const ringGeo = new THREE.TorusGeometry(BRACELET_RADIUS, BRACELET_THICKNESS, 20, 100);
+        const ring = new THREE.Mesh(ringGeo, silverMaterial);
+        ring.rotation.x = Math.PI / 2;
+        ring.castShadow = true;
+        ring.receiveShadow = true;
+        braceletGroup.add(ring);
+
+        const charmsContainer = new THREE.Group();
+        braceletGroup.add(charmsContainer);
+
+        const gltfLoader = new GLTFLoader();
+        const fbxLoader = new FBXLoader();
+
+        // --- LOADING LOGIC ---
+        document.getElementById('folder-input').addEventListener('change', async (event) => {
+            const files = Array.from(event.target.files).filter(f => 
+                f.name.toLowerCase().endsWith('.glb') || 
+                f.name.toLowerCase().endsWith('.gltf') || 
+                f.name.toLowerCase().endsWith('.fbx')
+            );
+
+            if(files.length === 0) { alert("No models found!"); return; }
+
+            while(charmsContainer.children.length > 0){ charmsContainer.remove(charmsContainer.children[0]); }
+            
+            const msg = document.getElementById('loading-msg');
+            msg.style.display = 'block';
+            msg.innerText = `Polishing ${files.length} charms...`;
+
+            const loadedMeshes = [];
+            for (const file of files) {
+                try {
+                    const object = await loadModelFile(file);
+                    if(object) loadedMeshes.push(object);
+                } catch(err) { console.error(err); }
+            }
+
+            msg.style.display = 'none';
+            arrangeCharms(loadedMeshes);
+        });
+
+        function loadModelFile(file) {
+            return new Promise((resolve, reject) => {
+                const url = URL.createObjectURL(file);
+                const loader = file.name.toLowerCase().endsWith('.fbx') ? fbxLoader : gltfLoader;
+
+                loader.load(url, (data) => {
+                    let sceneObj = data.scene || data;
+                    
+                    const box = new THREE.Box3().setFromObject(sceneObj);
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const scale = CHARM_SIZE / maxDim;
+                    sceneObj.scale.set(scale, scale, scale);
+
+                    const center = box.getCenter(new THREE.Vector3());
+                    sceneObj.position.sub(center.multiplyScalar(scale));
+
+                    const newBox = new THREE.Box3().setFromObject(sceneObj);
+                    const topY = newBox.max.y;
+                    sceneObj.position.y -= topY;
+
+                    sceneObj.traverse(child => {
+                        if(child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            if(child.material) {
+                                child.material.envMapIntensity = 1.0;
+                                child.material.needsUpdate = true;
+                            }
+                        }
+                    });
+
+                    resolve(sceneObj);
+                }, undefined, reject);
+            });
+        }
+
+        // --- ARRANGEMENT ---
+        function arrangeCharms(meshes) {
+            const count = meshes.length;
+            const angleStep = (Math.PI * 2) / count;
+
+            meshes.forEach((mesh, index) => {
+                const angle = index * angleStep;
+
+                const pivot = new THREE.Object3D();
+                const x = Math.cos(angle) * BRACELET_RADIUS;
+                const z = Math.sin(angle) * BRACELET_RADIUS;
+                pivot.position.set(x, 0, z);
+                pivot.rotation.y = -angle;
+
+                const loopGeo = new THREE.TorusGeometry(BRACELET_THICKNESS + 0.1, 0.05, 16, 50);
+                const loop = new THREE.Mesh(loopGeo, silverMaterial);
+                loop.rotation.y = Math.PI / 2;
+                loop.castShadow = true;
+                
+                const danglePivot = new THREE.Object3D();
+                danglePivot.position.y = -(BRACELET_THICKNESS + 0.15); 
+                mesh.rotation.y = (Math.random() - 0.5) * 0.5; 
+                danglePivot.add(mesh);
+
+                pivot.add(loop);
+                pivot.add(danglePivot);
+                charmsContainer.add(pivot);
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
