@@ -248,6 +248,10 @@
                 style="width:100%; background:#ff4444; color:white; border:none; padding:8px; border-radius:4px; margin-top:10px; cursor:pointer; font-size:11px; font-weight:bold;">
                 🗑️ SİL / DELETE
             </button>
+            <button onclick="addSelectedCharmToCart()"
+                style="width:100%; background:#28a745; color:white; border:none; padding:8px; border-radius:4px; margin-top:5px; cursor:pointer; font-size:11px; font-weight:bold;">
+                🛒 SEPETE EKLE / ADD TO CART
+            </button>
         </div>
 
     </div>
@@ -497,6 +501,39 @@
                 const idx = allCharmMeshes.indexOf(selectedCharm);
                 if (idx > -1) allCharmMeshes.splice(idx, 1);
                 deselectCharm();
+            }
+        };
+
+        window.addSelectedCharmToCart = async function () {
+            if (!selectedCharm) return;
+
+            const filename = selectedCharm.userData.filename || 'Unknown Charm';
+            const name = 'Custom charm: ' + filename;
+            const API_URL = 'https://testt-green.vercel.app/api/cart';
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: 'external-test-' + Date.now(),
+                        name: name,
+                        quantity: 1,
+                        color: '#FF0000'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('Success! Item added.');
+                    console.log('Cart updated:', data);
+                } else {
+                    throw new Error(data.error || 'Request failed');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+                console.error(err);
             }
         };
 
