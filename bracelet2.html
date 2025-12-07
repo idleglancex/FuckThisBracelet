@@ -9,7 +9,7 @@
         body {
             margin: 0;
             overflow: hidden;
-            background: #87CEEB;
+            background: linear-gradient(135deg, #880E4F 0%, #4A148C 100%);
             font-family: 'Segoe UI', sans-serif;
             color: white;
             user-select: none;
@@ -713,8 +713,10 @@
 
         // --- STYLE SWITCHER ---
         window.switchStyle = function (style) {
-            scene.background = new THREE.Color(style === 'bright' ? SKY_COLOR : 0x111111);
-            scene.fog.color.set(style === 'bright' ? SKY_COLOR : 0x111111);
+            // If bright/default style, use null to show CSS gradient. Else use dark metal color.
+            scene.background = (style === 'bright' ? null : new THREE.Color(0x111111));
+            // Fog matches the bottom of the gradient (#4A148C) for blending, or dark for metal
+            scene.fog.color.set(style === 'bright' ? 0x4A148C : 0x111111);
 
             // Toggle Lights
             lights.bright.forEach(l => l.visible = (style === 'bright'));
